@@ -1,0 +1,37 @@
+name: App CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: app
+        run: npx tsc --noEmit
+
+      - name: Export
+        working-directory: app
+        run: npx expo export --platform web
