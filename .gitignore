@@ -1,31 +1,22 @@
 .claude
 CLAUDE.md
 
-# Dependencies
-node_modules/
-
-# Environment
+# Environment (비밀번호 포함 - 절대 커밋 금지)
 .env
 .env.local
 .env.production
 
-# Expo / React Native
-.expo/
-dist/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+# Dependencies (npm install로 재생성됨)
+node_modules/
 
-# Build
+# Build output (npm run build로 재생성됨)
+dist/
 build/
 *.tsbuildinfo
+
+# Expo
+.expo/
 
 # OS
 .DS_Store
 Thumbs.db
-
-# IDE
-.vscode/
-.idea/

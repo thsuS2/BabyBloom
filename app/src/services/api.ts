@@ -2,7 +2,7 @@ import axios from 'axios';
 import { supabase } from './supabase';
 
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000/api'
+  ? 'http://localhost:3001/api'
   : 'https://your-production-url.com/api';
 
 const api = axios.create({
