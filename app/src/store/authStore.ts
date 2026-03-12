@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import api from '../services/api';
 
 interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, nickname?: string) => Promise<void>;
+  sendSignUpCode: (email: string) => Promise<void>;
+  signUp: (email: string, password: string, code: string, nickname?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   initialize: () => Promise<void>;
@@ -26,15 +28,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
-  signUp: async (email, password, nickname) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+  sendSignUpCode: async (email) => {
+    const { data } = await api.post('/auth/send-signup-code', { email });
+    return data;
+  },
 
-    if (data.user) {
-      await supabase.from('users').insert({
-        id: data.user.id,
-        email,
-        nickname,
+  signUp: async (email, password, code, nickname) => {
+    const { data } = await api.post('/auth/signup', { email, password, code, nickname });
+
+    // 백엔드가 Supabase session을 반환하므로, 앱에서도 세션 동기화
+    if (data.session) {
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
       });
     }
 

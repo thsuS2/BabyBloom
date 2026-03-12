@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "app",
-    "slug": "app",
+    "name": "BabyBloom",
+    "slug": "babybloom",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/BabyBloom.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFF5F5"
     },
     "ios": {
       "supportsTablet": true

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, Image, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
+import { colors, typography, spacing, radius } from '../design';
+import { Button } from '../design/components';
 
 export default function SignInScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -23,51 +25,91 @@ export default function SignInScreen({ navigation }: any) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.inner}>
-        <Text style={styles.logo}>BabyBloom</Text>
-        <Text style={styles.subtitle}>여성 웰니스 라이프로그</Text>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={s.inner}>
+        <Image
+          source={require('../../assets/BabyBloom.png')}
+          style={s.logo}
+          resizeMode="contain"
+        />
+        <Text style={s.title}>BabyBloom</Text>
+        <Text style={s.subtitle}>여성 웰니스 라이프로그</Text>
 
         <TextInput
-          style={styles.input}
+          style={s.input}
           placeholder="이메일"
+          placeholderTextColor={colors.textTertiary}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
         />
         <TextInput
-          style={styles.input}
+          style={s.input}
           placeholder="비밀번호"
+          placeholderTextColor={colors.textTertiary}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loading}>
-          <Text style={styles.buttonText}>{loading ? '로그인 중...' : '로그인'}</Text>
-        </TouchableOpacity>
+        <Button
+          title={loading ? '로그인 중...' : '로그인'}
+          onPress={handleSignIn}
+          disabled={loading}
+          style={{ marginTop: spacing.sm }}
+        />
 
         <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-          <Text style={styles.link}>계정이 없으신가요? 회원가입</Text>
+          <Text style={s.link}>계정이 없으신가요? 회원가입</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF5F5' },
-  inner: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
-  logo: { fontSize: 36, fontWeight: 'bold', color: '#E91E63', textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 40, marginTop: 8 },
+const s = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  inner: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  logo: {
+    width: 200,
+    height: 200,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  title: {
+    ...typography.h1,
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 40,
+    marginTop: spacing.sm,
+  },
   input: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#F0E0E0', fontSize: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...typography.body1,
+    color: colors.textPrimary,
   },
-  button: {
-    backgroundColor: '#E91E63', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8,
+  link: {
+    ...typography.body2,
+    color: colors.primary,
+    textAlign: 'center',
+    marginTop: spacing.xl,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  link: { color: '#E91E63', textAlign: 'center', marginTop: 20, fontSize: 14 },
 });

@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Switch,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabase';
 import { useAuthStore } from '../store/authStore';
+import { colors, typography, spacing, radius, layout } from '../design';
+import { Card, Button } from '../design/components';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const [profile, setProfile] = useState<any>(null);
@@ -115,99 +119,103 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>설정</Text>
+    <ScrollView style={s.container}>
+      {/* 헤더 + 뒤로가기 */}
+      <View style={s.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={s.backBtn}>← 뒤로</Text>
+        </TouchableOpacity>
+        <Text style={s.title}>설정</Text>
       </View>
 
       {/* 프로필 & 파트너 */}
-      <View style={styles.card}>
-        <View style={styles.profileRow}>
-          <View style={styles.profileItem}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{profile?.nickname?.[0] ?? '나'}</Text>
+      <Card>
+        <View style={s.profileRow}>
+          <View style={s.profileItem}>
+            <View style={s.avatar}>
+              <Text style={s.avatarText}>{profile?.nickname?.[0] ?? '나'}</Text>
             </View>
-            <Text style={styles.profileName}>{profile?.nickname ?? '나'}</Text>
+            <Text style={s.profileName}>{profile?.nickname ?? '나'}</Text>
           </View>
 
           {partner ? (
             <>
-              <Text style={styles.heartIcon}>❤️</Text>
-              <View style={styles.profileItem}>
-                <View style={[styles.avatar, { backgroundColor: '#E3F2FD' }]}>
-                  <Text style={[styles.avatarText, { color: '#1976D2' }]}>
+              <Text style={s.heartIcon}>❤️</Text>
+              <View style={s.profileItem}>
+                <View style={[s.avatar, { backgroundColor: colors.softBlueLight }]}>
+                  <Text style={[s.avatarText, { color: colors.softBlue }]}>
                     {getPartnerName()[0]}
                   </Text>
                 </View>
-                <Text style={styles.profileName}>{getPartnerName()}</Text>
+                <Text style={s.profileName}>{getPartnerName()}</Text>
               </View>
             </>
           ) : (
-            <View style={styles.profileItem}>
-              <View style={[styles.avatar, { backgroundColor: '#F5F5F5' }]}>
-                <Text style={[styles.avatarText, { color: '#ccc' }]}>?</Text>
+            <View style={s.profileItem}>
+              <View style={[s.avatar, { backgroundColor: colors.surfaceSecondary }]}>
+                <Text style={[s.avatarText, { color: colors.textTertiary }]}>?</Text>
               </View>
-              <Text style={[styles.profileName, { color: '#ccc' }]}>파트너 없음</Text>
+              <Text style={[s.profileName, { color: colors.textTertiary }]}>파트너 없음</Text>
             </View>
           )}
         </View>
 
         {partner ? (
-          <TouchableOpacity style={styles.disconnectBtn} onPress={disconnect}>
-            <Text style={styles.disconnectText}>연결 해제</Text>
-          </TouchableOpacity>
+          <Button title="연결 해제" onPress={disconnect} variant="outline" size="small" />
         ) : (
-          <View style={styles.partnerActions}>
-            <TouchableOpacity style={styles.actionBtn} onPress={generateCode} disabled={loading}>
-              <Text style={styles.actionBtnText}>초대코드 생성</Text>
-            </TouchableOpacity>
+          <View style={s.partnerActions}>
+            <Button title="초대코드 생성" onPress={generateCode} disabled={loading} size="small" />
             {inviteCode ? (
-              <View style={styles.codeBox}>
-                <Text style={styles.codeText}>{inviteCode}</Text>
-                <Text style={styles.codeHint}>24시간 유효 | 파트너에게 공유</Text>
+              <View style={s.codeBox}>
+                <Text style={s.codeText}>{inviteCode}</Text>
+                <Text style={s.codeHint}>24시간 유효 | 파트너에게 공유</Text>
               </View>
             ) : null}
 
-            <View style={styles.divider} />
+            <View style={s.divider} />
 
             <TextInput
-              style={styles.codeInput}
+              style={s.codeInput}
               placeholder="초대코드 입력"
+              placeholderTextColor={colors.textTertiary}
               value={inputCode}
               onChangeText={setInputCode}
               autoCapitalize="characters"
               maxLength={6}
             />
-            <TouchableOpacity
-              style={[styles.actionBtn, !inputCode.trim() && { opacity: 0.5 }]}
+            <Button
+              title="연결하기"
               onPress={connectByCode}
               disabled={loading || !inputCode.trim()}
-            >
-              <Text style={styles.actionBtnText}>연결하기</Text>
-            </TouchableOpacity>
+              variant="secondary"
+              size="small"
+            />
           </View>
         )}
-      </View>
+      </Card>
 
-      {/* 기록 항목 관리 (향후) */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>기록 항목</Text>
+      {/* 기록 항목 */}
+      <Card>
+        <Text style={s.cardTitle}>기록 항목</Text>
         {logTypes.map((lt) => (
-          <View key={lt.id} style={styles.settingRow}>
-            <Text style={styles.settingLabel}>{lt.name}</Text>
-            <Text style={styles.settingCategory}>{lt.category}</Text>
+          <View key={lt.id} style={s.settingRow}>
+            <Text style={s.settingLabel}>{lt.name}</Text>
+            <Text style={s.settingCategory}>{lt.category}</Text>
           </View>
         ))}
-      </View>
+      </Card>
 
       {/* 로그아웃 */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={() => {
+      <TouchableOpacity style={s.logoutBtn} onPress={() => {
         Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
           { text: '취소', style: 'cancel' },
           { text: '로그아웃', style: 'destructive', onPress: signOut },
         ]);
       }}>
-        <Text style={styles.logoutText}>로그아웃</Text>
+        <Text style={s.logoutText}>로그아웃</Text>
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />
@@ -215,50 +223,125 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF5F5' },
-  header: { padding: 24, paddingTop: 60 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#333' },
-  card: {
-    backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 20,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
+const s = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: '#E91E63', marginBottom: 12 },
-  profileRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 24, marginBottom: 16 },
-  profileItem: { alignItems: 'center' },
+  header: {
+    padding: spacing.xxl,
+    paddingTop: layout.screenPaddingTop,
+  },
+  backBtn: {
+    ...typography.body2,
+    color: colors.primary,
+    marginBottom: spacing.sm,
+  },
+  title: {
+    ...typography.h2,
+    color: colors.textPrimary,
+  },
+  cardTitle: {
+    ...typography.subtitle2,
+    color: colors.primary,
+    marginBottom: spacing.md,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xxl,
+    marginBottom: spacing.lg,
+  },
+  profileItem: {
+    alignItems: 'center',
+  },
   avatar: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: '#FCE4EC',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  avatarText: { fontSize: 22, fontWeight: 'bold', color: '#E91E63' },
-  profileName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  heartIcon: { fontSize: 24, marginTop: -12 },
-  partnerActions: { marginTop: 8 },
-  actionBtn: {
-    backgroundColor: '#E91E63', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 8,
+  avatarText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.primary,
   },
-  actionBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  codeBox: { backgroundColor: '#FFF5F5', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 8 },
-  codeText: { fontSize: 28, fontWeight: 'bold', color: '#E91E63', letterSpacing: 4 },
-  codeHint: { fontSize: 11, color: '#999', marginTop: 4 },
-  divider: { height: 1, backgroundColor: '#F0E0E0', marginVertical: 12 },
+  profileName: {
+    ...typography.body2,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  heartIcon: {
+    fontSize: 24,
+    marginTop: -spacing.md,
+  },
+  partnerActions: {
+    marginTop: spacing.sm,
+  },
+  codeBox: {
+    backgroundColor: colors.primarySurface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  codeText: {
+    ...typography.code,
+    color: colors.primary,
+  },
+  codeHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
+  },
   codeInput: {
-    backgroundColor: '#FAFAFA', borderRadius: 8, padding: 12, fontSize: 18, textAlign: 'center',
-    borderWidth: 1, borderColor: '#F0E0E0', marginBottom: 8, letterSpacing: 4,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    ...typography.numberSmall,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    letterSpacing: 4,
+    color: colors.textPrimary,
   },
-  disconnectBtn: {
-    borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E57373',
-  },
-  disconnectText: { color: '#E57373', fontSize: 14 },
   settingRow: {
-    flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
-  settingLabel: { fontSize: 15, color: '#333' },
-  settingCategory: { fontSize: 13, color: '#999' },
+  settingLabel: {
+    ...typography.body2,
+    color: colors.textPrimary,
+  },
+  settingCategory: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
   logoutBtn: {
-    marginHorizontal: 16, borderRadius: 12, padding: 16, alignItems: 'center',
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#E57373',
+    marginHorizontal: layout.screenPaddingH,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.error,
   },
-  logoutText: { color: '#E57373', fontSize: 16, fontWeight: '600' },
+  logoutText: {
+    ...typography.subtitle1,
+    color: colors.error,
+  },
 });

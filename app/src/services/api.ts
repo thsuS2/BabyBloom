@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { supabase } from './supabase';
 
+// ngrok 터널링 URL (개발 중 실기기 테스트용)
+const NGROK_URL = 'https://unruptured-ceremonially-mckayla.ngrok-free.dev';
+
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:3001/api'
+  ? `${NGROK_URL}/api`
   : 'https://your-production-url.com/api';
 
 const api = axios.create({
