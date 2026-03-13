@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '../services/supabase';
+import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { colors, typography, spacing, layout, shadows, radius } from '../design';
-import { Card } from '../design/components';
+import { Card, SafeScreen } from '../design/components';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -20,33 +20,27 @@ export default function HomeScreen() {
   const loadData = useCallback(async () => {
     if (!user) return;
 
-    const { data: p } = await supabase.from('users').select('*').eq('id', user.id).single();
-    setProfile(p);
+    try {
+      const [profileRes, logsRes, cycleRes] = await Promise.all([
+        api.get('/users/profile'),
+        api.get(`/logs/date/${today}`),
+        api.get('/cycle/latest'),
+      ]);
 
-    const { data: logs } = await supabase
-      .from('log_entries')
-      .select('*, log_type:log_types(*)')
-      .eq('user_id', user.id)
-      .eq('date', today);
-    setTodayLogs(logs ?? []);
+      setProfile(profileRes.data);
+      setTodayLogs(logsRes.data ?? []);
+      setCycleInfo(cycleRes.data);
 
-    const { data: cycle } = await supabase
-      .from('cycle_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('cycle_start_date', { ascending: false })
-      .limit(1)
-      .single();
-    setCycleInfo(cycle);
-
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { count } = await supabase
-      .from('log_entries')
-      .select('*, log_type:log_types!inner(category)', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('log_types.category', 'fitness')
-      .gte('date', weekAgo);
-    setWeeklyFitness(count ?? 0);
+      // 주간 운동 카운트
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const rangeRes = await api.get(`/logs/range?start=${weekAgo}&end=${today}`);
+      const fitnessCount = (rangeRes.data ?? []).filter(
+        (e: any) => e.log_type?.category === 'fitness',
+      ).length;
+      setWeeklyFitness(fitnessCount);
+    } catch {
+      // 에러 시 무시 (화면 표시용)
+    }
   }, [user, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -77,12 +71,13 @@ export default function HomeScreen() {
   const cycleDay = getCycleDayInfo();
 
   return (
-    <ScrollView
-      style={s.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
-      {/* 헤더 + 일러스트 */}
-      <View style={s.header}>
+    <SafeScreen>
+      <ScrollView
+        style={s.scrollBody}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        {/* 헤더 + 일러스트 */}
+        <View style={s.header}>
         <View style={s.headerText}>
           <Text style={s.greeting}>안녕하세요,</Text>
           <Text style={s.nickname}>{profile?.nickname ?? '회원'}님</Text>
@@ -143,22 +138,21 @@ export default function HomeScreen() {
         </View>
       </Card>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </SafeScreen>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
+  scrollBody: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: spacing.xxl,
-    paddingTop: layout.screenPaddingTop,
   },
   headerText: {
     flex: 1,

@@ -1,8 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { supabase } from '../services/supabase';
+import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { colors, typography, spacing, radius, layout, shadows } from '../design';
+import { Card, SafeScreen, ScreenHeader } from '../design/components';
 
 export default function CalendarScreen() {
   const user = useAuthStore((s) => s.user);
@@ -21,14 +23,11 @@ export default function CalendarScreen() {
 
   const loadCycles = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('cycle_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('cycle_start_date', { ascending: false });
-
-    setCycles(data ?? []);
-    buildMarkedDates(data ?? []);
+    try {
+      const { data } = await api.get('/cycle');
+      setCycles(data ?? []);
+      buildMarkedDates(data ?? []);
+    } catch {}
   };
 
   const buildMarkedDates = (data: any[]) => {
@@ -40,8 +39,8 @@ export default function CalendarScreen() {
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const key = d.toISOString().split('T')[0];
         marks[key] = {
-          color: '#FFCDD2',
-          textColor: '#C62828',
+          color: colors.periodLight,
+          textColor: colors.periodDark,
           startingDay: key === cycle.cycle_start_date,
           endingDay: key === (cycle.cycle_end_date ?? cycle.cycle_start_date),
         };
@@ -52,12 +51,12 @@ export default function CalendarScreen() {
 
   const loadDayLogs = async (date: string) => {
     if (!user) return;
-    const { data } = await supabase
-      .from('log_entries')
-      .select('*, log_type:log_types(*)')
-      .eq('user_id', user.id)
-      .eq('date', date);
-    setDayLogs(data ?? []);
+    try {
+      const { data } = await api.get(`/logs/date/${date}`);
+      setDayLogs(data ?? []);
+    } catch {
+      setDayLogs([]);
+    }
   };
 
   const handleDayPress = (day: any) => {
@@ -65,76 +64,109 @@ export default function CalendarScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>캘린더</Text>
-      </View>
+    <SafeScreen>
+      <ScreenHeader title="캘린더" />
+      <ScrollView style={s.scrollBody} showsVerticalScrollIndicator={false}>
+        <Calendar
+          markingType="period"
+          markedDates={{
+            ...markedDates,
+            [selectedDate]: {
+              ...markedDates[selectedDate],
+              selected: true,
+              selectedColor: colors.primary,
+            },
+          }}
+          onDayPress={handleDayPress}
+          theme={{
+            todayTextColor: colors.primary,
+            arrowColor: colors.primary,
+            calendarBackground: colors.surface,
+            textDayFontSize: 14,
+            textMonthFontSize: 16,
+            textMonthFontWeight: '600',
+          }}
+          style={s.calendar}
+        />
 
-      <Calendar
-        markingType="period"
-        markedDates={{
-          ...markedDates,
-          [selectedDate]: {
-            ...markedDates[selectedDate],
-            selected: true,
-            selectedColor: '#E91E63',
-          },
-        }}
-        onDayPress={handleDayPress}
-        theme={{
-          todayTextColor: '#E91E63',
-          arrowColor: '#E91E63',
-        }}
-        style={styles.calendar}
-      />
+        <View style={s.legendRow}>
+          <View style={[s.legendDot, { backgroundColor: colors.periodLight }]} />
+          <Text style={s.legendText}>생리 기간</Text>
+          <View style={[s.legendDot, { backgroundColor: colors.primary, marginLeft: spacing.lg }]} />
+          <Text style={s.legendText}>선택된 날짜</Text>
+        </View>
 
-      <View style={styles.legendRow}>
-        <View style={[styles.legendDot, { backgroundColor: '#FFCDD2' }]} />
-        <Text style={styles.legendText}>생리 기간</Text>
-        <View style={[styles.legendDot, { backgroundColor: '#E91E63', marginLeft: 16 }]} />
-        <Text style={styles.legendText}>선택된 날짜</Text>
-      </View>
+        <Card>
+          <Text style={s.cardTitle}>{selectedDate} 기록</Text>
+          {dayLogs.length === 0 ? (
+            <Text style={s.empty}>이 날의 기록이 없어요</Text>
+          ) : (
+            dayLogs.map((log) => (
+              <View key={log.id} style={s.logRow}>
+                <Text style={s.logLabel}>{log.log_type?.name}</Text>
+                <Text style={s.logValue}>
+                  {log.value}{log.log_type?.unit ? ` ${log.log_type.unit}` : ''}
+                </Text>
+              </View>
+            ))
+          )}
+        </Card>
 
-      {/* 선택된 날짜의 기록 */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{selectedDate} 기록</Text>
-        {dayLogs.length === 0 ? (
-          <Text style={styles.empty}>이 날의 기록이 없어요</Text>
-        ) : (
-          dayLogs.map((log) => (
-            <View key={log.id} style={styles.logRow}>
-              <Text style={styles.logLabel}>{log.log_type?.name}</Text>
-              <Text style={styles.logValue}>
-                {log.value}{log.log_type?.unit ? ` ${log.log_type.unit}` : ''}
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </SafeScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF5F5' },
-  header: { padding: 24, paddingTop: 60 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#333' },
-  calendar: { marginHorizontal: 16, borderRadius: 12, overflow: 'hidden' },
-  legendRow: { flexDirection: 'row', alignItems: 'center', padding: 16, marginLeft: 8 },
-  legendDot: { width: 12, height: 12, borderRadius: 6, marginRight: 6 },
-  legendText: { fontSize: 13, color: '#666' },
-  card: {
-    backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 16,
-    shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 1,
+const s = StyleSheet.create({
+  scrollBody: {
+    flex: 1,
   },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: '#E91E63', marginBottom: 12 },
-  empty: { color: '#aaa', textAlign: 'center', paddingVertical: 16 },
+  calendar: {
+    marginHorizontal: layout.screenPaddingH,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    marginLeft: spacing.sm,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: spacing.xs,
+  },
+  legendText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  cardTitle: {
+    ...typography.subtitle2,
+    color: colors.primary,
+    marginBottom: spacing.md,
+  },
+  empty: {
+    ...typography.body2,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+  },
   logRow: {
-    flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
-  logLabel: { fontSize: 15, color: '#555' },
-  logValue: { fontSize: 15, fontWeight: '600', color: '#333' },
+  logLabel: {
+    ...typography.body2,
+    color: colors.textSecondary,
+  },
+  logValue: {
+    ...typography.subtitle2,
+    color: colors.textPrimary,
+  },
 });

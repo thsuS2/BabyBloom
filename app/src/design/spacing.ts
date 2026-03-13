@@ -22,7 +22,6 @@ export const radius = {
 
 export const layout = {
   screenPaddingH: 16,
-  screenPaddingTop: 60,
   cardPadding: 20,
   cardMarginBottom: 12,
   tabBarHeight: 85,

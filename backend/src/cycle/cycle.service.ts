@@ -7,7 +7,7 @@ export class CycleService {
 
   async create(userId: string, startDate: string, endDate?: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('cycle_logs')
       .insert({ user_id: userId, cycle_start_date: startDate, cycle_end_date: endDate })
       .select()
@@ -19,7 +19,7 @@ export class CycleService {
 
   async update(userId: string, id: string, endDate: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('cycle_logs')
       .update({ cycle_end_date: endDate })
       .eq('id', id)
@@ -33,7 +33,7 @@ export class CycleService {
 
   async getAll(userId: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('cycle_logs')
       .select('*')
       .eq('user_id', userId)
@@ -45,7 +45,7 @@ export class CycleService {
 
   async getLatest(userId: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('cycle_logs')
       .select('*')
       .eq('user_id', userId)
@@ -59,7 +59,7 @@ export class CycleService {
 
   async delete(userId: string, id: string) {
     const { error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('cycle_logs')
       .delete()
       .eq('id', id)

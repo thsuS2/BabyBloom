@@ -14,7 +14,7 @@ export class PartnerService {
   async createInviteCode(userId: string) {
     // 기존 미사용 코드 만료 처리
     await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('invite_codes')
       .delete()
       .eq('user_id', userId)
@@ -24,7 +24,7 @@ export class PartnerService {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24시간
 
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('invite_codes')
       .insert({ user_id: userId, code, expires_at: expiresAt })
       .select()
@@ -38,7 +38,7 @@ export class PartnerService {
   async connectByCode(userId: string, code: string) {
     // 코드 조회
     const { data: invite, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('invite_codes')
       .select('*')
       .eq('code', code.toUpperCase())
@@ -59,7 +59,7 @@ export class PartnerService {
 
     // 이미 연결된 파트너가 있는지 확인
     const { data: existing } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('partner_links')
       .select('*')
       .eq('status', 'accepted')
@@ -72,7 +72,7 @@ export class PartnerService {
 
     // 파트너 연결 생성
     const { data: link, error: linkError } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('partner_links')
       .insert({
         requester_id: invite.user_id,
@@ -86,7 +86,7 @@ export class PartnerService {
 
     // 코드 사용 처리
     await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('invite_codes')
       .update({ is_used: true })
       .eq('id', invite.id);
@@ -97,7 +97,7 @@ export class PartnerService {
   // 파트너 정보 조회
   async getPartner(userId: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('partner_links')
       .select('*, requester:users!requester_id(*), partner:users!partner_id(*)')
       .eq('status', 'accepted')
@@ -111,7 +111,7 @@ export class PartnerService {
   // 공유 카테고리 설정
   async updateSharedCategories(userId: string, categories: string[]) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('partner_links')
       .update({ shared_categories: categories })
       .eq('status', 'accepted')
@@ -126,7 +126,7 @@ export class PartnerService {
   // 파트너 연결 해제
   async disconnect(userId: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('partner_links')
       .update({ status: 'disconnected', disconnected_at: new Date().toISOString() })
       .eq('status', 'accepted')

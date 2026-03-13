@@ -3,10 +3,10 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '../services/supabase';
+import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { colors, typography, spacing, radius, layout } from '../design';
-import { Card, Button } from '../design/components';
+import { Card, Button, SafeScreen, ScreenHeader } from '../design/components';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
@@ -27,24 +27,25 @@ export default function SettingsScreen() {
 
   const loadProfile = async () => {
     if (!user) return;
-    const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
-    setProfile(data);
+    try {
+      const { data } = await api.get('/users/profile');
+      setProfile(data);
+    } catch {}
   };
 
   const loadPartner = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('partner_links')
-      .select('*, requester:users!requester_id(*), partner:users!partner_id(*)')
-      .eq('status', 'accepted')
-      .or(`requester_id.eq.${user.id},partner_id.eq.${user.id}`)
-      .single();
-    setPartner(data);
+    try {
+      const { data } = await api.get('/partner');
+      setPartner(data);
+    } catch {}
   };
 
   const loadLogTypes = async () => {
-    const { data } = await supabase.from('log_types').select('*').order('display_order');
-    setLogTypes(data ?? []);
+    try {
+      const { data } = await api.get('/logs/types');
+      setLogTypes(data ?? []);
+    } catch {}
   };
 
   const getPartnerName = () => {
@@ -58,46 +59,30 @@ export default function SettingsScreen() {
     if (!user) return;
     setLoading(true);
 
-    await supabase.from('invite_codes').delete().eq('user_id', user.id).eq('is_used', false);
-
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    const { error } = await supabase
-      .from('invite_codes')
-      .insert({ user_id: user.id, code, expires_at: expiresAt });
+    try {
+      const { data } = await api.post('/partner/invite');
+      setInviteCode(data.code);
+    } catch (err: any) {
+      Alert.alert('오류', err.response?.data?.message ?? err.message);
+    }
 
     setLoading(false);
-    if (error) return Alert.alert('오류', error.message);
-    setInviteCode(code);
   };
 
   const connectByCode = async () => {
     if (!user || !inputCode.trim()) return;
     setLoading(true);
 
-    const { data: invite } = await supabase
-      .from('invite_codes')
-      .select('*')
-      .eq('code', inputCode.toUpperCase())
-      .eq('is_used', false)
-      .single();
+    try {
+      await api.post('/partner/connect', { code: inputCode.toUpperCase() });
+      setInputCode('');
+      Alert.alert('완료', '파트너와 연결되었습니다!');
+      loadPartner();
+    } catch (err: any) {
+      Alert.alert('오류', err.response?.data?.message ?? err.message);
+    }
 
-    if (!invite) { setLoading(false); return Alert.alert('오류', '유효하지 않은 초대코드입니다'); }
-    if (new Date(invite.expires_at) < new Date()) { setLoading(false); return Alert.alert('오류', '만료된 초대코드입니다'); }
-    if (invite.user_id === user.id) { setLoading(false); return Alert.alert('오류', '본인의 초대코드는 사용할 수 없습니다'); }
-
-    const { error } = await supabase
-      .from('partner_links')
-      .insert({ requester_id: invite.user_id, partner_id: user.id, status: 'accepted' });
-
-    if (error) { setLoading(false); return Alert.alert('오류', error.message); }
-
-    await supabase.from('invite_codes').update({ is_used: true }).eq('id', invite.id);
     setLoading(false);
-    setInputCode('');
-    Alert.alert('완료', '파트너와 연결되었습니다!');
-    loadPartner();
   };
 
   const disconnect = () => {
@@ -106,32 +91,22 @@ export default function SettingsScreen() {
       {
         text: '해제', style: 'destructive',
         onPress: async () => {
-          if (!user) return;
-          await supabase
-            .from('partner_links')
-            .update({ status: 'disconnected', disconnected_at: new Date().toISOString() })
-            .eq('status', 'accepted')
-            .or(`requester_id.eq.${user.id},partner_id.eq.${user.id}`);
-          setPartner(null);
+          try {
+            await api.delete('/partner');
+            setPartner(null);
+          } catch (err: any) {
+            Alert.alert('오류', err.response?.data?.message ?? err.message);
+          }
         },
       },
     ]);
   };
 
   return (
-    <ScrollView style={s.container}>
-      {/* 헤더 + 뒤로가기 */}
-      <View style={s.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={s.backBtn}>← 뒤로</Text>
-        </TouchableOpacity>
-        <Text style={s.title}>설정</Text>
-      </View>
-
-      {/* 프로필 & 파트너 */}
+    <SafeScreen edges={['top', 'bottom']}>
+      <ScreenHeader title="설정" onBack={() => navigation.goBack()} />
+      <ScrollView style={s.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* 프로필 & 파트너 */}
       <Card>
         <View style={s.profileRow}>
           <View style={s.profileItem}>
@@ -218,28 +193,15 @@ export default function SettingsScreen() {
         <Text style={s.logoutText}>로그아웃</Text>
       </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </SafeScreen>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
+  scrollBody: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    padding: spacing.xxl,
-    paddingTop: layout.screenPaddingTop,
-  },
-  backBtn: {
-    ...typography.body2,
-    color: colors.primary,
-    marginBottom: spacing.sm,
-  },
-  title: {
-    ...typography.h2,
-    color: colors.textPrimary,
   },
   cardTitle: {
     ...typography.subtitle2,

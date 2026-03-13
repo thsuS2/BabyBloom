@@ -8,7 +8,7 @@ export class LogsService {
   // 기록 항목 마스터 목록
   async getLogTypes() {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('log_types')
       .select('*')
       .order('display_order');
@@ -20,7 +20,7 @@ export class LogsService {
   // 유저의 활성화된 기록 항목
   async getUserLogSettings(userId: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('user_log_settings')
       .select('*, log_type:log_types(*)')
       .eq('user_id', userId)
@@ -33,7 +33,7 @@ export class LogsService {
   // 기록 항목 활성화/비활성화
   async toggleLogSetting(userId: string, logTypeId: string, isActive: boolean) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('user_log_settings')
       .upsert(
         { user_id: userId, log_type_id: logTypeId, is_active: isActive },
@@ -49,7 +49,7 @@ export class LogsService {
   // 기록 저장 (upsert: 같은 날 같은 항목이면 업데이트)
   async saveEntry(userId: string, logTypeId: string, date: string, value: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('log_entries')
       .upsert(
         { user_id: userId, log_type_id: logTypeId, date, value },
@@ -72,7 +72,7 @@ export class LogsService {
     }));
 
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('log_entries')
       .upsert(rows, { onConflict: 'user_id,log_type_id,date' })
       .select();
@@ -84,7 +84,7 @@ export class LogsService {
   // 특정 날짜 기록 조회
   async getEntriesByDate(userId: string, date: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('log_entries')
       .select('*, log_type:log_types(*)')
       .eq('user_id', userId)
@@ -97,7 +97,7 @@ export class LogsService {
   // 기간별 기록 조회
   async getEntriesByRange(userId: string, startDate: string, endDate: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('log_entries')
       .select('*, log_type:log_types(*)')
       .eq('user_id', userId)
@@ -112,7 +112,7 @@ export class LogsService {
   // 기록 삭제
   async deleteEntry(userId: string, entryId: string) {
     const { error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('log_entries')
       .delete()
       .eq('id', entryId)

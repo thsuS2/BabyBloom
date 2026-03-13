@@ -7,7 +7,7 @@ export class UsersService {
 
   async getProfile(userId: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('users')
       .select('*')
       .eq('id', userId)
@@ -19,7 +19,7 @@ export class UsersService {
 
   async updateProfile(userId: string, nickname: string) {
     const { data, error } = await this.supabase
-      .getClient()
+      .getAdminClient()
       .from('users')
       .update({ nickname })
       .eq('id', userId)

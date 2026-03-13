@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
+import { colors, typography, spacing, radius } from '../design';
+import { Button } from '../design/components';
 
 export default function SignUpScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -24,7 +27,7 @@ export default function SignUpScreen({ navigation }: any) {
   }, []);
 
   const startTimer = () => {
-    setTimer(300); // 5분
+    setTimer(300);
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       setTimer((prev) => {
@@ -95,99 +98,161 @@ export default function SignUpScreen({ navigation }: any) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.inner}>
-        <Text style={styles.title}>회원가입</Text>
+    <KeyboardAvoidingView
+      style={s.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          <Text style={s.title}>회원가입</Text>
 
-        {step === 'form' ? (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder="닉네임 (선택)"
-              value={nickname}
-              onChangeText={setNickname}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="이메일"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="비밀번호 (6자 이상)"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+          {step === 'form' ? (
+            <>
+              <TextInput
+                style={s.input}
+                placeholder="닉네임 (선택)"
+                placeholderTextColor={colors.textTertiary}
+                value={nickname}
+                onChangeText={setNickname}
+              />
+              <TextInput
+                style={s.input}
+                placeholder="이메일"
+                placeholderTextColor={colors.textTertiary}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              <TextInput
+                style={s.input}
+                placeholder="비밀번호 (6자 이상)"
+                placeholderTextColor={colors.textTertiary}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
 
-            <TouchableOpacity style={styles.button} onPress={handleSendCode} disabled={loading}>
-              <Text style={styles.buttonText}>{loading ? '발송 중...' : '인증코드 발송'}</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={styles.subtitle}>{email}</Text>
-            <Text style={styles.desc}>이메일로 발송된 6자리 인증 코드를 입력해주세요</Text>
+              <Button
+                title={loading ? '발송 중...' : '인증코드 발송'}
+                onPress={handleSendCode}
+                disabled={loading}
+                style={{ marginTop: spacing.sm }}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={s.subtitle}>{email}</Text>
+              <Text style={s.desc}>이메일로 발송된 6자리 인증 코드를 입력해주세요</Text>
 
-            <TextInput
-              style={[styles.input, styles.codeInput]}
-              placeholder="인증 코드 6자리"
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              maxLength={6}
-            />
+              <TextInput
+                style={[s.input, s.codeInput]}
+                placeholder="인증 코드 6자리"
+                placeholderTextColor={colors.textTertiary}
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
 
-            {timer > 0 && (
-              <Text style={styles.timer}>남은 시간: {formatTime(timer)}</Text>
-            )}
-            {timer === 0 && step === 'verify' && (
-              <Text style={styles.expired}>인증 코드가 만료되었습니다</Text>
-            )}
+              {timer > 0 && (
+                <Text style={s.timer}>남은 시간: {formatTime(timer)}</Text>
+              )}
+              {timer === 0 && step === 'verify' && (
+                <Text style={s.expired}>인증 코드가 만료되었습니다</Text>
+              )}
 
-            <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading || timer === 0}>
-              <Text style={styles.buttonText}>{loading ? '가입 중...' : '회원가입 완료'}</Text>
-            </TouchableOpacity>
+              <Button
+                title={loading ? '가입 중...' : '회원가입 완료'}
+                onPress={handleSignUp}
+                disabled={loading || timer === 0}
+                style={{ marginTop: spacing.sm }}
+              />
 
-            <TouchableOpacity onPress={handleResendCode} disabled={loading}>
-              <Text style={styles.link}>인증코드 재발송</Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={handleResendCode} disabled={loading}>
+                <Text style={s.link}>인증코드 재발송</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => { setStep('form'); setCode(''); if (intervalRef.current) clearInterval(intervalRef.current); }}>
-              <Text style={styles.link}>이메일 변경</Text>
-            </TouchableOpacity>
-          </>
-        )}
+              <TouchableOpacity onPress={() => { setStep('form'); setCode(''); if (intervalRef.current) clearInterval(intervalRef.current); }}>
+                <Text style={s.link}>이메일 변경</Text>
+              </TouchableOpacity>
+            </>
+          )}
 
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.link}>이미 계정이 있으신가요? 로그인</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={s.link}>이미 계정이 있으신가요? 로그인</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF5F5' },
-  inner: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#E91E63', textAlign: 'center', marginBottom: 32 },
-  subtitle: { fontSize: 16, fontWeight: '600', color: '#333', textAlign: 'center', marginBottom: 8 },
-  desc: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 20 },
+const s = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 40,
+  },
+  title: {
+    ...typography.h1,
+    color: colors.primary,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  subtitle: {
+    ...typography.subtitle1,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  desc: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
   input: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#F0E0E0', fontSize: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...typography.body1,
+    color: colors.textPrimary,
   },
   codeInput: {
-    textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold',
+    textAlign: 'center',
+    fontSize: 24,
+    letterSpacing: 8,
+    fontWeight: 'bold',
   },
-  button: {
-    backgroundColor: '#E91E63', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8,
+  link: {
+    ...typography.body2,
+    color: colors.primary,
+    textAlign: 'center',
+    marginTop: spacing.xl,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  link: { color: '#E91E63', textAlign: 'center', marginTop: 20, fontSize: 14 },
-  timer: { color: '#E91E63', textAlign: 'center', fontSize: 14, marginBottom: 8 },
-  expired: { color: '#999', textAlign: 'center', fontSize: 14, marginBottom: 8 },
+  timer: {
+    ...typography.body2,
+    color: colors.primary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  expired: {
+    ...typography.body2,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
 });

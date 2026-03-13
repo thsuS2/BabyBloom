@@ -1,47 +1,85 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { SupabaseService } from '../supabase/supabase.service';
 import { MailService } from '../mail/mail.service';
+import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private supabase: SupabaseService,
     private mailService: MailService,
+    private jwtService: JwtService,
   ) {}
 
-  /** 6자리 인증 코드 생성 및 이메일 발송 */
-  async sendSignUpCode(email: string) {
-    const admin = this.supabase.getAdminClient();
+  // ─── 토큰 발급 헬퍼 ───
 
-    // 기존 코드 삭제 (같은 이메일)
-    await admin.from('email_verification_codes').delete().eq('email', email);
+  private generateAccessToken(userId: string, email: string) {
+    return this.jwtService.sign({ sub: userId, email });
+  }
 
-    // 6자리 랜덤 코드
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+  private async generateRefreshToken(userId: string): Promise<string> {
+    const db = this.supabase.getAdminClient();
+    const token = randomUUID();
+    const expiresAt = new Date(
+      Date.now() + 90 * 24 * 60 * 60 * 1000,
+    ).toISOString(); // 90일
 
-    // 5분 뒤 만료
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    const { error } = await admin.from('email_verification_codes').insert({
-      email,
-      code,
+    const { error } = await db.from('refresh_tokens').insert({
+      user_id: userId,
+      token,
       expires_at: expiresAt,
     });
 
-    if (error) throw new BadRequestException('인증 코드 저장 실패: ' + error.message);
+    if (error) throw new BadRequestException('Refresh token 생성 실패');
+    return token;
+  }
 
-    // 이메일 발송
+  private async issueTokens(userId: string, email: string) {
+    const accessToken = this.generateAccessToken(userId, email);
+    const refreshToken = await this.generateRefreshToken(userId);
+    return { accessToken, refreshToken };
+  }
+
+  // ─── 인증 코드 발송 ───
+
+  async sendSignUpCode(email: string) {
+    const db = this.supabase.getAdminClient();
+
+    await db.from('email_verification_codes').delete().eq('email', email);
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const { error } = await db
+      .from('email_verification_codes')
+      .insert({ email, code, expires_at: expiresAt });
+
+    if (error)
+      throw new BadRequestException('인증 코드 저장 실패: ' + error.message);
+
     await this.mailService.sendVerificationCode(email, code);
 
     return { message: '인증 코드가 이메일로 발송되었습니다' };
   }
 
-  /** 인증 코드 검증 후 회원가입 */
-  async signUp(email: string, password: string, code: string, nickname?: string) {
-    const admin = this.supabase.getAdminClient();
+  // ─── 회원가입 ───
+
+  async signUp(
+    email: string,
+    password: string,
+    code: string,
+    nickname?: string,
+  ) {
+    const db = this.supabase.getAdminClient();
 
     // 1. 코드 검증
-    const { data: codeRow, error: codeError } = await admin
+    const { data: codeRow, error: codeError } = await db
       .from('email_verification_codes')
       .select('*')
       .eq('email', email)
@@ -50,86 +88,229 @@ export class AuthService {
       .single();
 
     if (codeError || !codeRow) {
-      throw new BadRequestException('인증 코드가 올바르지 않거나 만료되었습니다');
+      throw new BadRequestException(
+        '인증 코드가 올바르지 않거나 만료되었습니다',
+      );
     }
 
-    // 2. 좀비 유저 정리 (auth에는 있지만 public.users에는 없는 경우)
-    const { data: existingUsers } = await admin.auth.admin.listUsers();
-    const existingAuthUser = (existingUsers?.users as any[])?.find((u) => u.email === email);
+    // 2. 이메일 중복 확인
+    const { data: existingUser } = await db
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
 
-    if (existingAuthUser) {
-      const { data: profileRow } = await admin
-        .from('users')
-        .select('id')
-        .eq('id', existingAuthUser.id)
-        .single();
-
-      if (profileRow) {
-        throw new BadRequestException('이미 등록된 이메일입니다');
-      }
-
-      // 좀비 유저 삭제 (auth에만 있고 public.users에 없음)
-      await admin.auth.admin.deleteUser(existingAuthUser.id);
+    if (existingUser) {
+      throw new BadRequestException('이미 등록된 이메일입니다');
     }
 
-    // 3. Auth 유저 생성
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+    // 3. 비밀번호 해시
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // 4. 유저 생성
+    const userId = randomUUID();
+    const { error: insertError } = await db.from('users').insert({
+      id: userId,
       email,
-      password,
-      email_confirm: true,
+      password_hash: passwordHash,
+      nickname,
     });
 
-    if (authError || !authData.user) {
-      throw new UnauthorizedException(authError?.message ?? '회원가입 실패');
-    }
-
-    // 4. 프로필 생성 (실패 시 auth 유저 롤백)
-    const { error: profileError } = await admin
-      .from('users')
-      .insert({ id: authData.user.id, email, nickname });
-
-    if (profileError) {
-      await admin.auth.admin.deleteUser(authData.user.id);
-      throw new BadRequestException('프로필 생성 실패: ' + profileError.message);
+    if (insertError) {
+      throw new BadRequestException('회원가입 실패: ' + insertError.message);
     }
 
     // 5. 인증 코드 삭제
-    await admin.from('email_verification_codes').delete().eq('email', email);
+    await db.from('email_verification_codes').delete().eq('email', email);
 
-    // 6. 세션 생성
-    const client = this.supabase.getClient();
-    const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // 6. 토큰 발급
+    const tokens = await this.issueTokens(userId, email);
 
-    if (signInError) {
-      throw new UnauthorizedException('회원가입 완료되었으나 자동 로그인 실패: ' + signInError.message);
-    }
-
-    return { user: authData.user, session: signInData.session };
+    return {
+      user: { id: userId, email, nickname },
+      ...tokens,
+    };
   }
+
+  // ─── 로그인 ───
 
   async signIn(email: string, password: string) {
-    const client = this.supabase.getClient();
+    const db = this.supabase.getAdminClient();
 
-    const { data, error } = await client.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data: user, error } = await db
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
 
-    if (error) throw new UnauthorizedException(error.message);
+    if (error || !user) {
+      throw new UnauthorizedException(
+        '이메일 또는 비밀번호가 올바르지 않습니다',
+      );
+    }
 
-    return { user: data.user, session: data.session };
+    if (!user.password_hash) {
+      throw new UnauthorizedException(
+        '비밀번호가 설정되지 않은 계정입니다. 고객센터에 문의해주세요.',
+      );
+    }
+
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) {
+      throw new UnauthorizedException(
+        '이메일 또는 비밀번호가 올바르지 않습니다',
+      );
+    }
+
+    const tokens = await this.issueTokens(user.id, user.email);
+
+    return {
+      user: { id: user.id, email: user.email, nickname: user.nickname },
+      ...tokens,
+    };
   }
 
-  async getUser(token: string) {
-    const client = this.supabase.getClient();
+  // ─── 토큰 갱신 ───
 
-    const { data, error } = await client.auth.getUser(token);
+  async refresh(refreshToken: string) {
+    const db = this.supabase.getAdminClient();
 
-    if (error) throw new UnauthorizedException(error.message);
+    const { data: tokenRow, error } = await db
+      .from('refresh_tokens')
+      .select('*')
+      .eq('token', refreshToken)
+      .is('revoked_at', null)
+      .single();
 
-    return data.user;
+    if (error || !tokenRow) {
+      throw new UnauthorizedException('유효하지 않은 refresh token입니다');
+    }
+
+    if (new Date(tokenRow.expires_at) < new Date()) {
+      await db
+        .from('refresh_tokens')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', tokenRow.id);
+      throw new UnauthorizedException('Refresh token이 만료되었습니다');
+    }
+
+    // 기존 refresh token 폐기 (rotation)
+    await db
+      .from('refresh_tokens')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', tokenRow.id);
+
+    const { data: user } = await db
+      .from('users')
+      .select('id, email, nickname')
+      .eq('id', tokenRow.user_id)
+      .single();
+
+    if (!user) {
+      throw new UnauthorizedException('사용자를 찾을 수 없습니다');
+    }
+
+    const tokens = await this.issueTokens(user.id, user.email);
+
+    return {
+      user: { id: user.id, email: user.email, nickname: user.nickname },
+      ...tokens,
+    };
+  }
+
+  // ─── 토큰 검증 (AuthGuard에서 사용) ───
+
+  verifyToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token);
+      return { id: payload.sub, email: payload.email };
+    } catch {
+      throw new UnauthorizedException('유효하지 않은 토큰입니다');
+    }
+  }
+
+  // ─── 내 정보 조회 ───
+
+  async getMe(userId: string) {
+    const db = this.supabase.getAdminClient();
+
+    const { data: user, error } = await db
+      .from('users')
+      .select('id, email, nickname, created_at')
+      .eq('id', userId)
+      .single();
+
+    if (error || !user) {
+      throw new UnauthorizedException('사용자를 찾을 수 없습니다');
+    }
+
+    return user;
+  }
+
+  // ─── 비밀번호 재설정 ───
+
+  async resetPassword(email: string, code: string, newPassword: string) {
+    const db = this.supabase.getAdminClient();
+
+    // 1. 코드 검증
+    const { data: codeRow, error: codeError } = await db
+      .from('email_verification_codes')
+      .select('*')
+      .eq('email', email)
+      .eq('code', code)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+
+    if (codeError || !codeRow) {
+      throw new BadRequestException(
+        '인증 코드가 올바르지 않거나 만료되었습니다',
+      );
+    }
+
+    // 2. 유저 존재 확인
+    const { data: user } = await db
+      .from('users')
+      .select('id, email')
+      .eq('email', email)
+      .single();
+
+    if (!user) {
+      throw new BadRequestException('등록되지 않은 이메일입니다');
+    }
+
+    // 3. 비밀번호 해시 업데이트
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const { error: updateError } = await db
+      .from('users')
+      .update({ password_hash: passwordHash })
+      .eq('id', user.id);
+
+    if (updateError) {
+      throw new BadRequestException('비밀번호 변경 실패: ' + updateError.message);
+    }
+
+    // 4. 인증 코드 삭제
+    await db.from('email_verification_codes').delete().eq('email', email);
+
+    // 5. 기존 refresh token 전부 폐기 (보안)
+    await db
+      .from('refresh_tokens')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+
+    return { message: '비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.' };
+  }
+
+  // ─── 로그아웃 (refresh token 폐기) ───
+
+  async signOut(refreshToken: string) {
+    const db = this.supabase.getAdminClient();
+
+    await db
+      .from('refresh_tokens')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('token', refreshToken);
+
+    return { message: '로그아웃 되었습니다' };
   }
 }

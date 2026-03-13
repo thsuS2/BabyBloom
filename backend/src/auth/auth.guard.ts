@@ -17,7 +17,7 @@ export class AuthGuard implements CanActivate {
     if (!auth) throw new UnauthorizedException('No token provided');
 
     const token = auth.replace('Bearer ', '');
-    const user = await this.authService.getUser(token);
+    const user = this.authService.verifyToken(token);
 
     request.user = user;
     request.token = token;

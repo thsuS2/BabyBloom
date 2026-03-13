@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, View, Text } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,6 +14,7 @@ import LogScreen from './src/screens/LogScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -80,18 +82,21 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      {user ? (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-        </Stack.Navigator>
-      ) : (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="SignIn" component={SignInScreen} />
-          <Stack.Screen name="SignUp" component={SignUpScreen} />
-        </Stack.Navigator>
-      )}
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        {user ? (
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </Stack.Navigator>
+        ) : (
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="SignIn" component={SignInScreen} />
+            <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </Stack.Navigator>
+        )}
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

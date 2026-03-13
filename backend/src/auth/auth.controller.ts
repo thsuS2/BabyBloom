@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Get, Headers } from '@nestjs/common';
+import { Controller, Post, Body, Get, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { SendCodeDto, SignUpDto, SignInDto } from './auth.dto';
+import { SendCodeDto, SignUpDto, SignInDto, ResetPasswordDto } from './auth.dto';
+import { AuthGuard } from './auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -21,9 +22,24 @@ export class AuthController {
     return this.authService.signIn(dto.email, dto.password);
   }
 
+  @Post('refresh')
+  refresh(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refresh(refreshToken);
+  }
+
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.email, dto.code, dto.newPassword);
+  }
+
+  @Post('signout')
+  signOut(@Body('refreshToken') refreshToken: string) {
+    return this.authService.signOut(refreshToken);
+  }
+
   @Get('me')
-  getMe(@Headers('authorization') auth: string) {
-    const token = auth?.replace('Bearer ', '');
-    return this.authService.getUser(token);
+  @UseGuards(AuthGuard)
+  getMe(@Req() req) {
+    return this.authService.getMe(req.user.id);
   }
 }

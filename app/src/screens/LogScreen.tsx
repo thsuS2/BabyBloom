@@ -2,10 +2,15 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
 } from 'react-native';
-import { supabase } from '../services/supabase';
+import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { colors, typography, spacing, radius, layout, shadows } from '../design';
-import { Card, Button, Badge, BottomSheet, Toggle } from '../design/components';
+import { Card, Button, Badge, BottomSheet, Toggle, SafeScreen, ScreenHeader } from '../design/components';
+import {
+  IconSmile, IconScale, IconMoon, IconMood, IconActivity, IconStopwatch,
+  IconCapsule, IconPill, IconMemo, IconHeartFill, IconHeart, IconPin,
+  IconBaby, IconShield,
+} from '../components/Icons';
 
 interface LogType {
   id: string;
@@ -16,18 +21,26 @@ interface LogType {
   options: string[] | null;
 }
 
-const LOG_ICONS: Record<string, string> = {
-  '컨디션': '😊',
-  '체중': '⚖️',
-  '수면시간': '😴',
-  '기분': '🎭',
-  '운동': '🏃',
-  '운동시간': '⏱️',
-  '영양제': '💊',
-  '피임약': '💊',
-  '메모': '📝',
-  '관계': '💕',
-  '임신시도': '🤰',
+const ICON_MAP: Record<string, React.FC<{ size?: number; color?: string }>> = {
+  '컨디션': IconSmile,
+  '체중': IconScale,
+  '수면시간': IconMoon,
+  '기분': IconMood,
+  '운동': IconActivity,
+  '운동시간': IconStopwatch,
+  '영양제': IconCapsule,
+  '피임약': IconPill,
+  '메모': IconMemo,
+  '관계': IconHeart,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'health': colors.coral,
+  'fitness': colors.secondary,
+  'supplement': colors.softBlue,
+  'mood': colors.roseGold,
+  'intimate': colors.primaryDark,
+  'memo': colors.textSecondary,
 };
 
 const TODAY = new Date().toISOString().split('T')[0];
@@ -79,69 +92,104 @@ export default function LogScreen() {
   const goToToday = () => setSelectedDate(TODAY);
 
   const loadLogTypes = async () => {
-    const { data } = await supabase
-      .from('log_types')
-      .select('*')
-      .order('display_order');
-    setLogTypes(data ?? []);
+    try {
+      const { data } = await api.get('/logs/types');
+      setLogTypes(data ?? []);
+    } catch {}
   };
 
   const loadEntries = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('log_entries')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', selectedDate);
-
-    if (data) {
-      const existing: Record<string, string> = {};
-      data.forEach((e: any) => { existing[e.log_type_id] = e.value; });
-      setValues(existing);
-    } else {
+    try {
+      const { data } = await api.get(`/logs/date/${selectedDate}`);
+      if (data) {
+        const existing: Record<string, string> = {};
+        data.forEach((e: any) => { existing[e.log_type_id] = e.value; });
+        setValues(existing);
+      } else {
+        setValues({});
+      }
+    } catch {
       setValues({});
     }
   };
 
   const loadLatestCycle = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('cycle_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('cycle_start_date', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (data) {
-      setLatestCycle(data);
-      setIsOnPeriod(!data.cycle_end_date);
-    }
+    try {
+      const { data } = await api.get('/cycle/latest');
+      if (data) {
+        setLatestCycle(data);
+        setIsOnPeriod(!data.cycle_end_date);
+      }
+    } catch {}
   };
 
   const handlePeriodToggle = async (value: boolean) => {
     if (!user) return;
     setIsOnPeriod(value);
 
-    if (value) {
-      const { error } = await supabase
-        .from('cycle_logs')
-        .insert({ user_id: user.id, cycle_start_date: selectedDate });
-      if (error) return Alert.alert('오류', error.message);
-      loadLatestCycle();
-    } else if (latestCycle && !latestCycle.cycle_end_date) {
-      const { error } = await supabase
-        .from('cycle_logs')
-        .update({ cycle_end_date: selectedDate })
-        .eq('id', latestCycle.id);
-      if (error) return Alert.alert('오류', error.message);
-      loadLatestCycle();
+    try {
+      if (value) {
+        await api.post('/cycle', { startDate: selectedDate });
+        loadLatestCycle();
+      } else if (latestCycle && !latestCycle.cycle_end_date) {
+        await api.patch(`/cycle/${latestCycle.id}`, { endDate: selectedDate });
+        loadLatestCycle();
+      }
+    } catch (err: any) {
+      Alert.alert('오류', err.response?.data?.message ?? err.message);
+      setIsOnPeriod(!value);
     }
   };
 
   const openSheet = (lt: LogType) => {
+    if (lt.name === '관계') return; // 관계는 하트 토글로 처리
     setActiveSheet(lt);
     setSheetValue(values[lt.id] ?? '');
+  };
+
+  // 관계 카드 하트 토글 — 즉시 저장/해제
+  const handleIntimateToggle = async (lt: LogType, heartValue: string) => {
+    if (!user) return;
+    const currentVal = values[lt.id];
+    const isDeselect = currentVal === heartValue;
+
+    setSavingId(lt.id);
+    try {
+      if (isDeselect) {
+        // 해제: 기존 엔트리 삭제
+        const { data: entries } = await api.get(`/logs/date/${selectedDate}`);
+        const entry = entries?.find((e: any) => e.log_type_id === lt.id);
+        if (entry) await api.delete(`/logs/${entry.id}`);
+
+        setValues((prev) => {
+          const next = { ...prev };
+          delete next[lt.id];
+          return next;
+        });
+      } else {
+        // 저장
+        await api.post('/logs/entry', {
+          logTypeId: lt.id,
+          date: selectedDate,
+          value: heartValue,
+        });
+        setValues((prev) => ({ ...prev, [lt.id]: heartValue }));
+        setSavedIds((prev) => new Set(prev).add(lt.id));
+        setTimeout(() => {
+          setSavedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(lt.id);
+            return next;
+          });
+        }, 2000);
+      }
+    } catch (err: any) {
+      Alert.alert('오류', err.response?.data?.message ?? err.message);
+    } finally {
+      setSavingId(null);
+    }
   };
 
   const confirmSheet = async () => {
@@ -152,29 +200,27 @@ export default function LogScreen() {
     setSavingId(id);
 
     if (val) {
-      // 값이 있으면 즉시 저장
-      const { error } = await supabase
-        .from('log_entries')
-        .upsert(
-          { user_id: user.id, log_type_id: id, date: selectedDate, value: val },
-          { onConflict: 'user_id,log_type_id,date' },
-        );
+      try {
+        await api.post('/logs/entry', {
+          logTypeId: id,
+          date: selectedDate,
+          value: val,
+        });
 
-      if (error) {
+        setValues((prev) => ({ ...prev, [id]: val }));
+        setSavedIds((prev) => new Set(prev).add(id));
+      } catch (err: any) {
         setSavingId(null);
-        return Alert.alert('저장 실패', error.message);
+        return Alert.alert('저장 실패', err.response?.data?.message ?? err.message);
       }
-
-      setValues((prev) => ({ ...prev, [id]: val }));
-      setSavedIds((prev) => new Set(prev).add(id));
     } else {
-      // 값이 비면 삭제
-      await supabase
-        .from('log_entries')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('log_type_id', id)
-        .eq('date', selectedDate);
+      try {
+        const { data: entries } = await api.get(`/logs/date/${selectedDate}`);
+        const entry = entries?.find((e: any) => e.log_type_id === id);
+        if (entry) {
+          await api.delete(`/logs/${entry.id}`);
+        }
+      } catch {}
 
       setValues((prev) => {
         const next = { ...prev };
@@ -191,7 +237,6 @@ export default function LogScreen() {
     setSavingId(null);
     setActiveSheet(null);
 
-    // 저장 피드백: 2초 후 체크 표시 제거
     if (val) {
       setTimeout(() => {
         setSavedIds((prev) => {
@@ -203,7 +248,8 @@ export default function LogScreen() {
     }
   };
 
-  const getIcon = (lt: LogType) => LOG_ICONS[lt.name] ?? '📌';
+  const getIconComponent = (lt: LogType) => ICON_MAP[lt.name] ?? IconPin;
+  const getCategoryColor = (lt: LogType) => CATEGORY_COLORS[lt.category] ?? colors.textSecondary;
 
   const getDisplayValue = (lt: LogType) => {
     const val = values[lt.id];
@@ -213,6 +259,118 @@ export default function LogScreen() {
 
   const recordedCount = Object.keys(values).length;
   const totalCount = logTypes.length;
+
+  // 관계 타입은 Masonry에서 제외, 별도 렌더링
+  const normalTypes = logTypes.filter((lt) => lt.name !== '관계');
+  const intimateType = logTypes.find((lt) => lt.name === '관계');
+
+  // Masonry: 홀수/짝수 인덱스로 좌/우 컬럼 분리
+  const leftColumn = normalTypes.filter((_, i) => i % 2 === 0);
+  const rightColumn = normalTypes.filter((_, i) => i % 2 === 1);
+
+  const renderCard = (lt: LogType) => {
+    const val = getDisplayValue(lt);
+    const hasValue = !!val;
+    const justSaved = savedIds.has(lt.id);
+    const catColor = getCategoryColor(lt);
+    const isMemo = lt.data_type === 'text' && lt.name.includes('메모');
+    const IconComp = getIconComponent(lt);
+
+    return (
+      <TouchableOpacity
+        key={lt.id}
+        style={[
+          s.masonryCard,
+          hasValue && { borderColor: catColor, borderWidth: 1.5 },
+          justSaved && { borderColor: colors.secondary, backgroundColor: colors.secondaryLight + '20' },
+        ]}
+        onPress={() => openSheet(lt)}
+        activeOpacity={0.7}
+      >
+        {justSaved && <Text style={s.savedCheck}>✓</Text>}
+        <View style={[s.iconCircle, { backgroundColor: catColor + '18' }]}>
+          <IconComp size={22} color={catColor} />
+        </View>
+        <Text style={s.gridName} numberOfLines={1}>{lt.name}</Text>
+        {hasValue ? (
+          <Text
+            style={[s.gridValue, { color: catColor }]}
+            numberOfLines={isMemo ? 2 : 1}
+          >
+            {val}
+          </Text>
+        ) : (
+          <Text style={s.gridEmpty}>탭하여 기록</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderIntimateCard = () => {
+    if (!intimateType) return null;
+    const currentVal = values[intimateType.id];
+    const justSaved = savedIds.has(intimateType.id);
+    const isSaving = savingId === intimateType.id;
+
+    return (
+      <Card style={[
+        s.intimateCard,
+        justSaved && { borderColor: colors.secondary, borderWidth: 1.5 },
+      ]}>
+        {justSaved && <Text style={s.savedCheck}>✓</Text>}
+        <Text style={s.intimateTitle}>관계</Text>
+        <View style={s.heartRow}>
+          <TouchableOpacity
+            style={s.heartItem}
+            onPress={() => handleIntimateToggle(intimateType, '아기를 기다려요')}
+            disabled={isSaving}
+            activeOpacity={0.6}
+          >
+            <View style={[
+              s.heartCircle,
+              currentVal === '아기를 기다려요' && { backgroundColor: colors.primaryLight },
+            ]}>
+              {currentVal === '아기를 기다려요'
+                ? <IconHeartFill size={28} color={colors.primary} />
+                : <IconBaby size={28} color={colors.textTertiary} />
+              }
+            </View>
+            <Text style={[
+              s.heartLabel,
+              currentVal === '아기를 기다려요' && { color: colors.primary, fontWeight: '600' },
+            ]}>
+              아기를{'\n'}기다려요
+            </Text>
+          </TouchableOpacity>
+
+          <View style={s.heartDivider} />
+
+          <TouchableOpacity
+            style={s.heartItem}
+            onPress={() => handleIntimateToggle(intimateType, '피임 했어요')}
+            disabled={isSaving}
+            activeOpacity={0.6}
+          >
+            <View style={[
+              s.heartCircle,
+              currentVal === '피임 했어요' && { backgroundColor: colors.softBlueLight },
+            ]}>
+              {currentVal === '피임 했어요'
+                ? <IconHeartFill size={28} color={colors.softBlue} />
+                : <IconShield size={28} color={colors.textTertiary} />
+              }
+            </View>
+            <Text style={[
+              s.heartLabel,
+              currentVal === '피임 했어요' && { color: colors.softBlue, fontWeight: '600' },
+            ]}>
+              피임{'\n'}했어요
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Card>
+    );
+  };
 
   const renderSheetContent = () => {
     if (!activeSheet) return null;
@@ -272,77 +430,73 @@ export default function LogScreen() {
     );
   };
 
+  // BottomSheet 타이틀에 아이콘 이름 표시
+  const getSheetTitle = () => {
+    if (!activeSheet) return '';
+    return activeSheet.name;
+  };
+
   return (
-    <ScrollView style={s.container}>
-      {/* 헤더 */}
-      <View style={s.header}>
-        <Text style={s.title}>{isToday ? '오늘의 기록' : '과거 기록'}</Text>
-        <Badge
-          text={`${recordedCount}/${totalCount}`}
-          variant={recordedCount > 0 ? 'recorded' : 'empty'}
-        />
-      </View>
+    <SafeScreen>
+      <ScreenHeader
+        title={isToday ? '오늘의 기록' : '과거 기록'}
+        rightElement={
+          <Badge
+            text={`${recordedCount}/${totalCount}`}
+            variant={recordedCount > 0 ? 'recorded' : 'empty'}
+          />
+        }
+      >
+        {/* 날짜 네비게이션 */}
+        <View style={s.dateNav}>
+          <TouchableOpacity onPress={goToPrev} style={s.dateArrow}>
+            <Text style={s.dateArrowText}>◀</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={goToToday}>
+            <Text style={[s.dateLabel, isToday && s.dateLabelToday]}>
+              {formatDateLabel(selectedDate)}
+              {isToday && '  · 오늘'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={goToNext} style={s.dateArrow} disabled={isTomorrow}>
+            <Text style={[s.dateArrowText, isTomorrow && s.dateArrowDisabled]}>▶</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenHeader>
 
-      {/* 날짜 네비게이션 */}
-      <View style={s.dateNav}>
-        <TouchableOpacity onPress={goToPrev} style={s.dateArrow}>
-          <Text style={s.dateArrowText}>◀</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={goToToday}>
-          <Text style={[s.dateLabel, isToday && s.dateLabelToday]}>
-            {formatDateLabel(selectedDate)}
-            {isToday && '  · 오늘'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={goToNext} style={s.dateArrow} disabled={isTomorrow}>
-          <Text style={[s.dateArrowText, isTomorrow && s.dateArrowDisabled]}>▶</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView style={s.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* 생리 토글 */}
+        <Card>
+          <Toggle
+            label="생리 중"
+            icon="🔴"
+            value={isOnPeriod}
+            onValueChange={handlePeriodToggle}
+            activeColor={colors.period}
+          />
+        </Card>
 
-      {/* 생리 토글 */}
-      <Card>
-        <Toggle
-          label="생리 중"
-          icon="🔴"
-          value={isOnPeriod}
-          onValueChange={handlePeriodToggle}
-          activeColor={colors.period}
-        />
-      </Card>
+        {/* 관계 하트 카드 */}
+        {renderIntimateCard()}
 
-      {/* 그리드 카드 */}
-      <View style={s.grid}>
-        {logTypes.map((lt) => {
-          const val = getDisplayValue(lt);
-          const hasValue = !!val;
-          const justSaved = savedIds.has(lt.id);
-          return (
-            <TouchableOpacity
-              key={lt.id}
-              style={[s.gridCard, hasValue && s.gridCardRecorded, justSaved && s.gridCardJustSaved]}
-              onPress={() => openSheet(lt)}
-              activeOpacity={0.7}
-            >
-              {justSaved && <Text style={s.savedCheck}>✓</Text>}
-              <Text style={s.gridIcon}>{getIcon(lt)}</Text>
-              <Text style={s.gridName} numberOfLines={1}>{lt.name}</Text>
-              {hasValue ? (
-                <Text style={s.gridValue} numberOfLines={1}>{val}</Text>
-              ) : (
-                <Text style={s.gridEmpty}>미입력</Text>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+        {/* Masonry 2-column Grid */}
+        <View style={s.masonry}>
+          <View style={s.masonryColumn}>
+            {leftColumn.map(renderCard)}
+          </View>
+          <View style={s.masonryColumn}>
+            {rightColumn.map(renderCard)}
+          </View>
+        </View>
 
-      <View style={{ height: 40 }} />
+        <View style={{ height: 40 }} />
+      </ScrollView>
 
       {/* 바텀시트 */}
       <BottomSheet
         visible={!!activeSheet}
         onClose={() => setActiveSheet(null)}
-        title={activeSheet ? `${getIcon(activeSheet)} ${activeSheet.name}` : ''}
+        title={getSheetTitle()}
       >
         {renderSheetContent()}
         <View style={s.sheetActions}>
@@ -357,31 +511,21 @@ export default function LogScreen() {
           />
         </View>
       </BottomSheet>
-    </ScrollView>
+    </SafeScreen>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
+  scrollBody: {
     flex: 1,
-    backgroundColor: colors.background,
   },
-  header: {
-    paddingHorizontal: spacing.xxl,
-    paddingTop: layout.screenPaddingTop,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  title: {
-    ...typography.h2,
-    color: colors.textPrimary,
-  },
+
+  // 날짜 네비게이션
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
+    paddingTop: spacing.sm,
     gap: spacing.lg,
   },
   dateArrow: {
@@ -403,29 +547,64 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // Grid
-  grid: {
+  // 관계 하트 카드
+  intimateCard: {
+    overflow: 'hidden',
+  },
+  intimateTitle: {
+    ...typography.label,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  heartRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    gap: spacing.xxxl,
+  },
+  heartItem: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  heartCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.surfaceSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heartLabel: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  heartDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+  },
+
+  // Masonry Grid
+  masonry: {
+    flexDirection: 'row',
     paddingHorizontal: layout.screenPaddingH,
     gap: layout.gridGap,
   },
-  gridCard: {
-    width: '47%' as any,
+  masonryColumn: {
+    flex: 1,
+    gap: layout.gridGap,
+  },
+  masonryCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
     alignItems: 'center',
     gap: spacing.sm,
     ...shadows.card,
-  },
-  gridCardRecorded: {
-    borderWidth: 1.5,
-    borderColor: colors.secondaryLight,
-  },
-  gridCardJustSaved: {
-    borderColor: colors.secondary,
-    backgroundColor: colors.secondaryLight + '20',
   },
   savedCheck: {
     position: 'absolute',
@@ -435,8 +614,12 @@ const s = StyleSheet.create({
     color: colors.secondary,
     fontWeight: 'bold',
   },
-  gridIcon: {
-    fontSize: 28,
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   gridName: {
     ...typography.label,
@@ -444,8 +627,8 @@ const s = StyleSheet.create({
   },
   gridValue: {
     ...typography.body2,
-    color: colors.secondary,
     fontWeight: '600',
+    textAlign: 'center',
   },
   gridEmpty: {
     ...typography.caption,

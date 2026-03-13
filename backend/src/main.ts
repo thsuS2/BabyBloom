@@ -7,6 +7,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  await app.listen(process.env.PORT ?? 3001);
+  const port = process.env.PORT ?? 3005;
+  await app.listen(port);
+  console.log(`🚀 BabyBloom API running on port ${port}`);
 }
 bootstrap();

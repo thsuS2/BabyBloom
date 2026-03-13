@@ -1,11 +1,15 @@
 import { create } from 'zustand';
-import { supabase } from '../services/supabase';
-import { Session, User } from '@supabase/supabase-js';
 import api from '../services/api';
+import { tokenStorage } from '../services/tokenStorage';
+
+interface User {
+  id: string;
+  email: string;
+  nickname?: string;
+}
 
 interface AuthState {
   user: User | null;
-  session: Session | null;
   loading: boolean;
   sendSignUpCode: (email: string) => Promise<void>;
   signUp: (email: string, password: string, code: string, nickname?: string) => Promise<void>;
@@ -16,45 +20,61 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  session: null,
   loading: true,
 
   initialize: async () => {
-    const { data } = await supabase.auth.getSession();
-    set({ session: data.session, user: data.session?.user ?? null, loading: false });
+    try {
+      const accessToken = await tokenStorage.getAccessToken();
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ session, user: session?.user ?? null });
-    });
+      if (!accessToken) {
+        set({ user: null, loading: false });
+        return;
+      }
+
+      // access token으로 내 정보 조회
+      const { data: user } = await api.get('/auth/me');
+      set({ user, loading: false });
+    } catch {
+      // 토큰 무효 → 정리 (api 인터셉터가 refresh 시도 후 실패한 경우)
+      await tokenStorage.clearTokens();
+      set({ user: null, loading: false });
+    }
   },
 
   sendSignUpCode: async (email) => {
-    const { data } = await api.post('/auth/send-signup-code', { email });
-    return data;
+    await api.post('/auth/send-signup-code', { email });
   },
 
   signUp: async (email, password, code, nickname) => {
-    const { data } = await api.post('/auth/signup', { email, password, code, nickname });
+    const { data } = await api.post('/auth/signup', {
+      email,
+      password,
+      code,
+      nickname,
+    });
 
-    // 백엔드가 Supabase session을 반환하므로, 앱에서도 세션 동기화
-    if (data.session) {
-      await supabase.auth.setSession({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-      });
-    }
-
-    set({ session: data.session, user: data.user });
+    await tokenStorage.setTokens(data.accessToken, data.refreshToken);
+    set({ user: data.user });
   },
 
   signIn: async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    set({ session: data.session, user: data.user });
+    const { data } = await api.post('/auth/signin', { email, password });
+
+    await tokenStorage.setTokens(data.accessToken, data.refreshToken);
+    set({ user: data.user });
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
-    set({ session: null, user: null });
+    try {
+      const refreshToken = await tokenStorage.getRefreshToken();
+      if (refreshToken) {
+        await api.post('/auth/signout', { refreshToken });
+      }
+    } catch {
+      // 서버 에러 무시
+    }
+
+    await tokenStorage.clearTokens();
+    set({ user: null });
   },
 }));

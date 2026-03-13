@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, Image, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, Image, TouchableOpacity, StyleSheet, Alert,
+  KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { colors, typography, spacing, radius } from '../design';
@@ -18,52 +19,65 @@ export default function SignInScreen({ navigation }: any) {
     try {
       await signIn(email, password);
     } catch (e: any) {
-      Alert.alert('로그인 실패', e.message);
+      Alert.alert('로그인 실패', e.response?.data?.message ?? e.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.inner}>
-        <Image
-          source={require('../../assets/BabyBloom.png')}
-          style={s.logo}
-          resizeMode="contain"
-        />
-        <Text style={s.title}>BabyBloom</Text>
-        <Text style={s.subtitle}>여성 웰니스 라이프로그</Text>
+    <KeyboardAvoidingView
+      style={s.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          <Image
+            source={require('../../assets/BabyBloom.png')}
+            style={s.logo}
+            resizeMode="contain"
+          />
+          <Text style={s.title}>BabyBloom</Text>
+          <Text style={s.subtitle}>여성 웰니스 라이프로그</Text>
 
-        <TextInput
-          style={s.input}
-          placeholder="이메일"
-          placeholderTextColor={colors.textTertiary}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          style={s.input}
-          placeholder="비밀번호"
-          placeholderTextColor={colors.textTertiary}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          <TextInput
+            style={s.input}
+            placeholder="이메일"
+            placeholderTextColor={colors.textTertiary}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <TextInput
+            style={s.input}
+            placeholder="비밀번호"
+            placeholderTextColor={colors.textTertiary}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
 
-        <Button
-          title={loading ? '로그인 중...' : '로그인'}
-          onPress={handleSignIn}
-          disabled={loading}
-          style={{ marginTop: spacing.sm }}
-        />
+          <Button
+            title={loading ? '로그인 중...' : '로그인'}
+            onPress={handleSignIn}
+            disabled={loading}
+            style={{ marginTop: spacing.sm }}
+          />
 
-        <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-          <Text style={s.link}>계정이 없으신가요? 회원가입</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity onPress={() => navigation.navigate('ResetPassword')}>
+            <Text style={s.link}>비밀번호를 잊으셨나요?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+            <Text style={s.link}>계정이 없으신가요? 회원가입</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -73,10 +87,11 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  inner: {
-    flex: 1,
+  scroll: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 32,
+    paddingBottom: 40,
   },
   logo: {
     width: 200,
