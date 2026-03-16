@@ -1,11 +1,15 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, View, Text } from 'react-native';
+
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from './src/store/authStore';
 import { colors } from './src/design';
+import {
+  IconSmile, IconPencil, IconCalendar, IconMood,
+} from './src/components/Icons';
 
 import SignInScreen from './src/screens/SignInScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
@@ -19,15 +23,17 @@ import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const TAB_ICONS: Record<string, React.FC<{ size?: number; color?: string }>> = {
+  '홈': IconSmile,
+  '기록': IconPencil,
+  '캘린더': IconCalendar,
+  '커뮤니티': IconMood,
+};
+
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    '홈': '🏠', '기록': '✏️', '캘린더': '📅', '커뮤니티': '💬',
-  };
-  return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>
-      {icons[label] ?? '·'}
-    </Text>
-  );
+  const IconComp = TAB_ICONS[label];
+  if (!IconComp) return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>·</Text>;
+  return <IconComp size={22} color={focused ? colors.primary : colors.textSecondary} />;
 }
 
 function MainTabs() {

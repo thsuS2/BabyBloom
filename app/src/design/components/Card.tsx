@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, ViewStyle, StyleSheet } from 'react-native';
+import { View, ViewStyle, StyleSheet, StyleProp } from 'react-native';
 import { colors } from '../colors';
 import { radius, layout } from '../spacing';
 import { shadows } from '../shadows';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   variant?: 'default' | 'subtle';
 }
 
